@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Command-line skeleton application for Drive API.
+"""Command-line application to clean the trash folder in Google Drive.
 Usage:
-  $ python sample.py
+  $ python TrashCleaner.py
 
 You can also get help on all the command-line flags the program understands
 by running:
 
-  $ python sample.py --help
+  $ python TrashCleaner.py --help
 
 """
 
@@ -52,7 +52,7 @@ def main(argv):
   # If the credentials don't exist or are invalid run through the native client
   # flow. The Storage object will ensure that if successful the good
   # credentials will get written back to the file.
-    storage = file.Storage('sample.dat')
+    storage = file.Storage('.TrashCleaner')
     credentials = storage.get()
     if credentials is None or credentials.invalid:
         CLIENT_ID = 'SOME_NUMBER_GOES_HERE.apps.googleusercontent.com'
@@ -64,11 +64,12 @@ def main(argv):
                        'https://www.googleapis.com/auth/drive.metadata.readonly',
                        'https://www.googleapis.com/auth/drive.readonly',
                        ]
-        flow = OAuth2WebServerFlow(CLIENT_ID, CLIENT_SECRET, OAUTH_SCOPE, REDIRECT_URI)
+        flow = client.OAuth2WebServerFlow(CLIENT_ID, CLIENT_SECRET, OAUTH_SCOPE, REDIRECT_URI)
         authorize_url = flow.step1_get_authorize_url()
-        print 'Go to the following link in your browser: ' + authorize_url
+        print 'Go to the following link in your browser:\n' + authorize_url
         code = raw_input('Enter verification code: ').strip()
         credentials = flow.step2_exchange(code)
+        storage.put(credentials)
 
   # Create an httplib2.Http object to handle our HTTP requests and authorize it
   # with our good Credentials.
@@ -79,13 +80,17 @@ def main(argv):
     service = discovery.build('drive', 'v2', http=http)
 
     try:
+        storage.put(credentials)
         print "Connected to drive!!!"
         candidates = findTrashedFiles(service)
-        print "Starting to remove files"
-        for item in candidates['items']:
-            print "File %s, has been moved to trash on %s" % (item['originalFilename'], item['modifiedDate'])
-            removeFromTrash(service, item['id'], item['originalFilename'])
-
+        if len(candidates['items']) > 0:
+            print "Starting to remove files"
+            for item in candidates['items']:
+                print "\tFile %s, has been moved to trash on %s" % (item['originalFilename'], item['modifiedDate'])
+                removeFromTrash(service, item['id'], item['originalFilename'])
+            print "\tfinished removing all files"
+        else:
+            print "No files to remove"
     except client.AccessTokenRefreshError:
         print ("The credentials have been revoked or expired, please re-run"
                "the application to re-authorize")
@@ -94,19 +99,19 @@ def main(argv):
 def findTrashedFiles(service):
     print "Getting all trashed files"
     result = service.files().list(q="trashed=true").execute()
-    print "\t\tCompleted request"
+    print "\tCompleted request"
     return result
 
 
 def removeFromTrash(service, fileid, filename):
-    print "try to remove %s with id %s", % (filename, fileid)
+    print "\ttry to remove %s with id %s" % (filename, fileid)
     try:
         result = service.files().delete(fileId=fileid).execute()
     except errors.HttpError, e:
         if e.resp.reason == "Not Found":
-            print "%s is already removed or doesn't exist" % (filename)
+            print "\t%s is already removed or doesn't exist" % (filename)
         else:
-            print "failed to remove %s returned %s %s" % (filename, e.resp.status, e.resp.reason)
+            print "ERROR:: failed to remove %s returned %s %s" % (filename, e.resp.status, e.resp.reason)
 
 if __name__ == '__main__':
     main(sys.argv)
